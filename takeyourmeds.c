@@ -21,6 +21,7 @@
 #include <gui/view.h>
 #include <gui/modules/submenu.h>
 #include <gui/modules/text_box.h>
+#include <gui/modules/variable_item_list.h>
 
 #include "tools/defs.h"
 #include "tools/fkit/meds.h"
@@ -29,15 +30,23 @@
 #include <takeyourmeds_icons.h>
 
 
-static void menu_manage_callback(void* context, uint32_t index);
+typedef struct {
+    ViewDispatcher* dispatcher;
+    VariableItemList* menu_edit_med;
+} AppContext;
+
 
 static uint32_t tick = 0;
 
 static uint32_t current_view_id;
-static uint8_t  target_med;
 
 static Medicine meds[16];
+static Medicine* target_med;
 static size_t meds_count = 0;
+
+static void rebuild_menu_edit_med(VariableItemList* menu);
+static void menu_manage_callback(void* context, uint32_t index);
+
 
 //////////////////
 ///  WRAPPERS  ///
@@ -132,23 +141,24 @@ static void menu_main_callback(void* context, uint32_t index) {
 ///  MANAGER MENU  ///
 //////////////////////
 
-static void rebuild_menu_manage(Submenu* menu, ViewDispatcher* dispatcher) {
+static void rebuild_menu_manage(Submenu* menu, AppContext* app) {
     submenu_reset(menu);
 
     submenu_set_header(menu, "Manage meds");
 
     for (uint8_t idx = 0; idx < MEDS_CAPACITY; idx++) {
         if (idx < meds_count) {
-            submenu_add_item(menu, meds[idx].name, idx, menu_manage_callback, dispatcher);
+            submenu_add_item(menu, meds[idx].name, idx, menu_manage_callback, app);
         } else {
-            submenu_add_item(menu, "(Empty slot)", idx, menu_manage_callback, dispatcher);
+            submenu_add_item(menu, "(Empty slot)", idx, menu_manage_callback, app);
         }
     }
-    submenu_add_item(menu, "Back", MEDS_CAPACITY, menu_manage_callback, dispatcher);
+    submenu_add_item(menu, "Back", MEDS_CAPACITY, menu_manage_callback, app);
 }
 
 static void menu_manage_callback(void* context, uint32_t index) {
-    ViewDispatcher* dispatcher = context;
+    AppContext* app = context;
+    ViewDispatcher* dispatcher = app->dispatcher;
 
     if (index >= MEDS_CAPACITY) {
         switch_to_view(dispatcher, VIEWID_MAINMENU);
@@ -160,13 +170,44 @@ static void menu_manage_callback(void* context, uint32_t index) {
         return;
     }
 
-    target_med = index;
+    target_med = &meds[index];
+    rebuild_menu_edit_med(app->menu_edit_med);
     switch_to_view(dispatcher, VIEWID_EDIT_MED);
 }
 
 static uint32_t manager_previous_callback(void* context) {
     UNUSED(context);
     return VIEWID_MAINMENU;
+}
+
+///////////////////////
+///  EDIT MED MENU  ///
+///////////////////////
+
+static void set_takes_for_selected_med(VariableItem* item) {
+    uint8_t index = variable_item_get_current_value_index(item);
+    target_med->takes = index + 1;
+
+    const char* values[] = {"1", "2", "3", "4", "5", "6"};
+    variable_item_set_current_value_text(item, values[index]);
+}
+
+static void rebuild_menu_edit_med(VariableItemList* menu) {
+    variable_item_list_reset(menu);
+
+    VariableItem* last = variable_item_list_add(
+        menu,
+        "Takes per day",
+        6,
+        set_takes_for_selected_med, NULL
+    );
+    variable_item_set_current_value_index(last, 0);
+    variable_item_set_current_value_text(last, "1");
+}
+
+static uint32_t menu_edit_med_previous_callback(void* context) {
+    UNUSED(context);
+    return VIEWID_MANAGE;
 }
 
 //////////////////////
@@ -185,7 +226,7 @@ static uint32_t about_previous_callback(void* context) {
 int32_t takeyourmeds_app(void* p) {
     UNUSED(p);
 
-    path_history = APP_DATA_PATH("history.bin");
+    path_history = APP_DATA_PATH(PATH_FILE_HISTORY);
 
     Gui* gui = furi_record_open(RECORD_GUI);
     ViewDispatcher* dispatcher = view_dispatcher_alloc();
@@ -226,20 +267,29 @@ int32_t takeyourmeds_app(void* p) {
     view_set_previous_callback(text_box_get_view(about), about_previous_callback);
 
     Submenu* menu_manage = submenu_alloc();
-    rebuild_menu_manage(menu_manage, dispatcher);
     view_set_previous_callback(submenu_get_view(menu_manage), manager_previous_callback);
+
+    VariableItemList* menu_edit_med = variable_item_list_alloc();
+    view_set_previous_callback(variable_item_list_get_view(menu_edit_med), menu_edit_med_previous_callback);
+
+    AppContext app = {
+        .dispatcher = dispatcher,
+        .menu_edit_med = menu_edit_med,
+    };
+    rebuild_menu_manage(menu_manage, &app);
     
     view_dispatcher_add_view(dispatcher, VIEWID_SPLASH,   splash);
     view_dispatcher_add_view(dispatcher, VIEWID_MAINMENU, submenu_get_view(menu_main));
     view_dispatcher_add_view(dispatcher, VIEWID_ABOUT,    text_box_get_view(about));
     view_dispatcher_add_view(dispatcher, VIEWID_MANAGE,   submenu_get_view(menu_manage));
+    view_dispatcher_add_view(dispatcher, VIEWID_EDIT_MED, variable_item_list_get_view(menu_edit_med));
 
     switch_to_view(dispatcher, VIEWID_SPLASH);
 
     view_dispatcher_set_tick_event_callback(
         dispatcher,
         splash_tick_callback,
-        furi_ms_to_ticks(100)
+        furi_ms_to_ticks(MS_PER_TICK)
     );
 
     view_dispatcher_run(dispatcher);
@@ -248,11 +298,13 @@ int32_t takeyourmeds_app(void* p) {
     view_dispatcher_remove_view(dispatcher, VIEWID_MAINMENU);
     view_dispatcher_remove_view(dispatcher, VIEWID_ABOUT);
     view_dispatcher_remove_view(dispatcher, VIEWID_MANAGE);
+    view_dispatcher_remove_view(dispatcher, VIEWID_EDIT_MED);
 
     view_free(splash);
     submenu_free(menu_main);
     text_box_free(about);
     submenu_free(menu_manage);
+    variable_item_list_free(menu_edit_med);
 
     view_dispatcher_free(dispatcher);
     furi_record_close(RECORD_GUI);
