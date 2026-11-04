@@ -22,29 +22,10 @@
 #include <gui/modules/submenu.h>
 #include <gui/modules/text_box.h>
 
+#include "defs.h"
 #include "floader/floader.h"
 
 #include <takeyourmeds_icons.h>
-
-
-#define VIEWID_SPLASH   0 // Done
-#define VIEWID_MAINMENU 1 // Done
-#define VIEWID_CHECKIN  2
-#define VIEWID_STATS    3
-#define VIEWID_MANAGE   4 // WIP
-#define VIEWID_SETTINGS 5
-#define VIEWID_ABOUT    6 // Done
-#define VIEWID_EDIT_MED 7
-#define VIEWID_NEW_MED  8
-
-#define MENUITEM_MAIN_CHECKIN  0
-#define MENUITEM_MAIN_STATS    1
-#define MENUITEM_MAIN_MANAGE   2 // WIP
-#define MENUITEM_MAIN_SETTINGS 3
-#define MENUITEM_MAIN_ABOUT    4 // Works
-#define MENUITEM_MAIN_EXIT     5 // Works
-
-#define MEDS_CAPACITY 16
 
 
 static uint32_t tick = 0;
@@ -115,15 +96,15 @@ static void splash_draw_callback(Canvas* canvas, void* context) {
 static void menu_main_callback(void* context, uint32_t index) {
     ViewDispatcher* dispatcher = context;
 
-    FURI_LOG_D("TakeYourMeds", "Main menu item %lu selected", (unsigned long)index);
+    FURI_LOG_D(APP_LOG_NAME, "Main menu item %lu selected", (unsigned long)index);
 
     switch(index) {
     case MENUITEM_MAIN_CHECKIN:
-        FURI_LOG_W("TakeYourMeds", "MENUITEM_MAIN_CHECKIN is not implemented");
+        FURI_LOG_W(APP_LOG_NAME, "MENUITEM_MAIN_CHECKIN is not implemented");
         break;
 
     case MENUITEM_MAIN_STATS:
-        FURI_LOG_W("TakeYourMeds", "MENUITEM_MAIN_STATS is not implemented");
+        FURI_LOG_W(APP_LOG_NAME, "MENUITEM_MAIN_STATS is not implemented");
         break;
 
     case MENUITEM_MAIN_MANAGE:
@@ -131,7 +112,7 @@ static void menu_main_callback(void* context, uint32_t index) {
         break;
 
     case MENUITEM_MAIN_SETTINGS:
-        FURI_LOG_W("TakeYourMeds", "MENUITEM_MAIN_SETTINGS is not implemented");
+        FURI_LOG_W(APP_LOG_NAME, "MENUITEM_MAIN_SETTINGS is not implemented");
         break;
 
     case MENUITEM_MAIN_ABOUT:
@@ -213,7 +194,7 @@ int32_t takeyourmeds_app(void* p) {
     view_set_input_callback(splash, splash_input_callback);
 
     Submenu* menu_main = submenu_alloc();
-    submenu_set_header(menu_main, "Take your Meds");
+    submenu_set_header(menu_main, APP_DISPLAY_NAME);
     submenu_add_item(menu_main, "Check in",    MENUITEM_MAIN_CHECKIN,  menu_main_callback, dispatcher);
     submenu_add_item(menu_main, "My stats",    MENUITEM_MAIN_STATS,    menu_main_callback, dispatcher);
     submenu_add_item(menu_main, "Manage meds", MENUITEM_MAIN_MANAGE,   menu_main_callback, dispatcher);
@@ -224,13 +205,16 @@ int32_t takeyourmeds_app(void* p) {
     TextBox* about = text_box_alloc();
     text_box_set_text(
         about,
-        "Take your Meds (v0.1)\n"
+        APP_DISPLAY_NAME
+        " (v0.1)\n"
         "\n"
         "Keep forgetting to take your meds? Gamify the process!\n"
         "This app can motivate you to do this regularly by tracking your daily streak (and rewarding you with achievements).\n"
         "\n"
         "Created by Anna Romashina <3\n"
-        "github.com/R1senDev/takeyourmeds\n"
+        "github.com/R1senDev/fap_"
+        APP_REG_NAME
+        "\n"
         "\n"
         "\"Care for your health more!\""
     );
