@@ -3,6 +3,13 @@
 
 #include "meds.h"
 
+static size_t bounded_string_length(const char* string, size_t capacity) {
+    size_t length = 0;
+    while (length < capacity && string[length] != '\0') {
+        length++;
+    }
+    return length;
+}
 
 bool reset_meds_file(const char* path) {
     Storage* storage = furi_record_open(RECORD_STORAGE);
@@ -66,11 +73,6 @@ bool load_meds(Medicine* meds, size_t capacity, size_t* count, const char* path)
             medicine.name[name_length++] = (char)byte;
         }
 
-        if (name_length < 2) {
-            success = false;
-            goto done;
-        }
-
         read = storage_file_read(file, &medicine.takes, sizeof(medicine.takes));
 
         if (read != sizeof(medicine.takes)) {
@@ -114,9 +116,9 @@ bool dump_meds(const Medicine* meds, size_t count, const char* path) {
     bool success = true;
 
     for (size_t i = 0; i < count; i++) {
-        size_t name_length = strnlen(meds[i].name, sizeof(meds[i].name));
+        size_t name_length = bounded_string_length(meds[i].name, sizeof(meds[i].name));
 
-        if (name_length < 2 || name_length > 16) {
+        if (name_length >= MED_NAME_MAX_SIZE) {
             success = false;
             break;
         }

@@ -4,7 +4,7 @@
 
 
 typedef struct {
-    char name[17];
+    char name[MED_NAME_MAX_SIZE];
     uint8_t takes;
 } Medicine;
 
