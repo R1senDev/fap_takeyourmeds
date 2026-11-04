@@ -1,10 +1,10 @@
 #include <furi.h>
 #include <storage/storage.h>
 
-#include "floader.h"
+#include "meds.h"
 
 
-bool reset_file(const char* path) {
+bool reset_meds_file(const char* path) {
     Storage* storage = furi_record_open(RECORD_STORAGE);
     File* file = storage_file_alloc(storage);
 
@@ -93,7 +93,7 @@ bool load_meds(Medicine* meds, size_t capacity, size_t* count, const char* path)
 
     if (!success) {
         FURI_LOG_E(APP_LOG_NAME, "Bad file. Resetting it");
-        reset_file(path);
+        reset_meds_file(path);
     }
 
     return success;

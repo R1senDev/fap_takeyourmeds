@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include "../defs.h"
 
 
@@ -10,7 +9,7 @@ typedef struct {
 } Medicine;
 
 
-bool reset_file(const char* path);
+bool reset_meds_file(const char* path);
 
 bool load_meds(Medicine* meds, size_t capacity, size_t* count, const char* path);
 

@@ -14,7 +14,7 @@
 
 
 #include <furi.h>
-#include <furi_hal_rtc.h>
+#include <storage/storage.h>
 
 #include <gui/gui.h>
 #include <gui/view_dispatcher.h>
@@ -22,11 +22,14 @@
 #include <gui/modules/submenu.h>
 #include <gui/modules/text_box.h>
 
-#include "defs.h"
-#include "floader/floader.h"
+#include "tools/defs.h"
+#include "tools/fkit/meds.h"
+#include "tools/fkit/history.h"
 
 #include <takeyourmeds_icons.h>
 
+
+static void menu_manage_callback(void* context, uint32_t index);
 
 static uint32_t tick = 0;
 
@@ -181,6 +184,8 @@ static uint32_t about_previous_callback(void* context) {
 
 int32_t takeyourmeds_app(void* p) {
     UNUSED(p);
+
+    path_history = APP_DATA_PATH("history.bin");
 
     Gui* gui = furi_record_open(RECORD_GUI);
     ViewDispatcher* dispatcher = view_dispatcher_alloc();
