@@ -1,0 +1,15 @@
+App(
+    appid="takeyourmeds",
+    name="Take your Meds",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="takeyourmeds_app",
+    stack_size=2 * 1024,
+    fap_category="Tools",
+
+    fap_version="0.1",
+    fap_icon="takeyourmeds.png",
+    fap_description="Keep forgetting to take your meds? Gamify it!",
+    fap_author="Anna Romashina",
+    fap_weburl="https://github.com/R1senDev/takeyourmeds",
+    fap_icon_assets="images"
+)
