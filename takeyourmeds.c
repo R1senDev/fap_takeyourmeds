@@ -22,6 +22,8 @@
 #include <gui/modules/submenu.h>
 #include <gui/modules/text_box.h>
 
+#include "floader/floader.h"
+
 #include <takeyourmeds_icons.h>
 
 
@@ -50,12 +52,8 @@ static uint32_t tick = 0;
 static uint32_t current_view_id;
 static uint8_t  target_med;
 
-typedef struct {
-    char name[17];
-    uint8_t takes;
-} Medicine;
 static Medicine meds[16];
-size_t meds_count = 0;
+static size_t meds_count = 0;
 
 //////////////////
 ///  WRAPPERS  ///
@@ -150,6 +148,21 @@ static void menu_main_callback(void* context, uint32_t index) {
 ///  MANAGER MENU  ///
 //////////////////////
 
+static void rebuild_menu_manage(Submenu* menu, ViewDispatcher* dispatcher) {
+    submenu_reset(menu);
+
+    submenu_set_header(menu, "Manage meds");
+
+    for (uint8_t idx = 0; idx < MEDS_CAPACITY; idx++) {
+        if (idx < meds_count) {
+            submenu_add_item(menu, meds[idx].name, idx, menu_manage_callback, dispatcher);
+        } else {
+            submenu_add_item(menu, "(Empty slot)", idx, menu_manage_callback, dispatcher);
+        }
+    }
+    submenu_add_item(menu, "Back", MEDS_CAPACITY, menu_manage_callback, dispatcher);
+}
+
 static void menu_manage_callback(void* context, uint32_t index) {
     ViewDispatcher* dispatcher = context;
 
@@ -213,7 +226,7 @@ int32_t takeyourmeds_app(void* p) {
         about,
         "Take your Meds (v0.1)\n"
         "\n"
-        "Keep forgetting to take your meds? Gamify it!\n"
+        "Keep forgetting to take your meds? Gamify the process!\n"
         "This app can motivate you to do this regularly by tracking your daily streak (and rewarding you with achievements).\n"
         "\n"
         "Created by Anna Romashina <3\n"
@@ -224,15 +237,7 @@ int32_t takeyourmeds_app(void* p) {
     view_set_previous_callback(text_box_get_view(about), about_previous_callback);
 
     Submenu* menu_manage = submenu_alloc();
-    submenu_set_header(menu_manage, "Manage meds");
-    for (uint8_t idx = 0; idx < MEDS_CAPACITY; idx++) {
-        if (idx < meds_count) {
-            submenu_add_item(menu_manage, meds[idx].name, idx, menu_manage_callback, dispatcher);
-        } else {
-            submenu_add_item(menu_manage, "(Empty slot)", idx, menu_manage_callback, dispatcher);
-        }
-    }
-    submenu_add_item(menu_manage, "Back", MEDS_CAPACITY, menu_manage_callback, dispatcher);
+    rebuild_menu_manage(menu_manage, dispatcher);
     view_set_previous_callback(submenu_get_view(menu_manage), manager_previous_callback);
     
     view_dispatcher_add_view(dispatcher, VIEWID_SPLASH,   splash);

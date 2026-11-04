@@ -8,7 +8,7 @@ App(
 
     fap_version="0.1",
     fap_icon="takeyourmeds.png",
-    fap_description="Keep forgetting to take your meds? Gamify it!",
+    fap_description="Keep forgetting to take your meds? Gamify the process!",
     fap_author="Anna Romashina",
     fap_weburl="https://github.com/R1senDev/takeyourmeds",
     fap_icon_assets="images"
