@@ -44,9 +44,11 @@ typedef struct {
     bool        closeable;
     bool        exit_on_back;
 } SplashScreen;
+
 typedef struct {
     ViewDispatcher* dispatcher;
     VariableItemList* menu_edit_med;
+    Submenu* menu_manage;
 
     SplashScreen splash_screens[SPLASHES_COUNT + 1];
 
@@ -74,8 +76,8 @@ static void menu_manage_callback(void* context, uint32_t index);
 ///  WRAPPERS  ///
 //////////////////
 
-static void switch_to_view(void* context, uint8_t view_id) {
-    AppContext* app = context;
+static void switch_to_view(AppContext* app, uint8_t view_id) {
+    if(!app || !app->dispatcher) return;
     view_dispatcher_switch_to_view(app->dispatcher, view_id);
     app->splash_is_active = false;
     current_view_id = view_id;
@@ -92,13 +94,12 @@ static bool app_navigation_callback(void* context) {
 
 static void tick_callback(void* context) {
     AppContext* app = context;
-    ViewDispatcher* dispatcher = app->dispatcher;
 
     tick++;
 
-    if (app->splash_is_active) {
+    if (app && app->splash_is_active && current_view_id <= SPLASHES_COUNT) {
         if (app->splash_screens[current_view_id].closeable && tick >= app->splash_start_ticks + SPLASH_DURATION_TICKS) {
-            switch_to_view(dispatcher, app->splash_target_view_after);
+            switch_to_view(app, app->splash_target_view_after);
         }
     }
 }
@@ -108,7 +109,7 @@ static void tick_callback(void* context) {
 ////////////////////////
 
 static void switch_to_splash(AppContext* app, uint8_t splash_id, uint8_t next_view_id) {
-    switch_to_view(app->dispatcher, splash_id);
+    switch_to_view(app, splash_id);
 
     app->splash_is_active = true;
     app->splash_start_ticks = tick;
@@ -117,13 +118,14 @@ static void switch_to_splash(AppContext* app, uint8_t splash_id, uint8_t next_vi
 
 static bool splash_input_callback(InputEvent* event, void* context) {
     AppContext* app = context;
+    if(!app || !event) return false;
     ViewDispatcher* dispatcher = app->dispatcher;
 
     if (event->type == InputTypePress) {
         if (event->key == InputKeyBack && app->splash_screens[current_view_id].exit_on_back) {
             view_dispatcher_stop(dispatcher);
         } else {
-            switch_to_view(dispatcher, app->splash_target_view_after);
+            switch_to_view(app, app->splash_target_view_after);
         }
         return true;
     }
@@ -133,6 +135,7 @@ static bool splash_input_callback(InputEvent* event, void* context) {
 
 static void splash_draw_callback(Canvas* canvas, void* context) {
     AppContext* app = context;
+    if(!app || current_view_id > SPLASHES_COUNT) return;
     SplashScreen* splash = &app->splash_screens[current_view_id];
 
     canvas_clear(canvas);
@@ -154,7 +157,8 @@ static void splash_draw_callback(Canvas* canvas, void* context) {
 ///////////////////
 
 static void menu_main_callback(void* context, uint32_t index) {
-    ViewDispatcher* dispatcher = context;
+    AppContext* app = context;
+    if(!app) return;
 
     FURI_LOG_D(APP_LOG_NAME, "Main menu item %lu selected", (unsigned long)index);
 
@@ -168,7 +172,7 @@ static void menu_main_callback(void* context, uint32_t index) {
         break;
 
     case MENUITEM_MAIN_MANAGE:
-        switch_to_view(dispatcher, VIEWID_MENU_MANAGE);
+        switch_to_view(app, VIEWID_MENU_MANAGE);
         break;
 
     case MENUITEM_MAIN_SETTINGS:
@@ -176,11 +180,11 @@ static void menu_main_callback(void* context, uint32_t index) {
         break;
 
     case MENUITEM_MAIN_ABOUT:
-        switch_to_view(dispatcher, VIEWID_TEXT_ABOUT);
+        switch_to_view(app, VIEWID_TEXT_ABOUT);
         break;
 
     case MENUITEM_MAIN_EXIT:
-        view_dispatcher_stop(dispatcher);
+        view_dispatcher_stop(app->dispatcher);
         break;
     }
 }
@@ -206,10 +210,10 @@ static void rebuild_menu_manage(Submenu* menu, AppContext* app) {
 
 static void menu_manage_callback(void* context, uint32_t index) {
     AppContext* app = context;
-    ViewDispatcher* dispatcher = app->dispatcher;
+    if(!app) return;
 
     if (index >= MEDS_CAPACITY) {
-        switch_to_view(dispatcher, VIEWID_MENU_MAIN);
+        switch_to_view(app, VIEWID_MENU_MAIN);
         return;
     }
 
@@ -217,12 +221,12 @@ static void menu_manage_callback(void* context, uint32_t index) {
 
     if (index >= meds_count) {
         memset(app->new_med_name, 0, sizeof(app->new_med_name));
-        switch_to_view(dispatcher, VIEWID_INPUT_NEW_MED_NAME);
+        switch_to_view(app, VIEWID_INPUT_NEW_MED_NAME);
         return;
     }
 
     rebuild_menu_edit_med(app->menu_edit_med);
-    switch_to_view(dispatcher, VIEWID_EDIT_MED);
+    switch_to_view(app, VIEWID_EDIT_MED);
 }
 
 static uint32_t manager_previous_callback(void* context) {
@@ -236,19 +240,29 @@ static uint32_t manager_previous_callback(void* context) {
 
 static void input_new_med_name_callback(void* context) {
     AppContext* app = context;
-    ViewDispatcher* dispatcher = app->dispatcher;
+    if(!app || !target_med) return;
 
-    switch_to_view(dispatcher, VIEWID_VIEW_BUSY);
-
-    memcpy(target_med->name, app->new_med_name, sizeof(target_med->name));
-    target_med->takes = 1;
-
-    if (dump_meds(meds, ++meds_count, APP_DATA_PATH(PATH_FILE_MEDS))) {
-        switch_to_view(dispatcher, VIEWID_SPLASH_NEW_MED_SUCCESS);
+    if(meds_count >= MEDS_CAPACITY || app->new_med_name[0] == '\0') {
+        switch_to_splash(app, VIEWID_SPLASH_ERROR, VIEWID_MENU_MANAGE);
         return;
     }
-    
-    // TODO: failure screen
+
+    // Always leave room for the terminating NUL byte.
+    strncpy(target_med->name, app->new_med_name, sizeof(target_med->name) - 1);
+    target_med->name[sizeof(target_med->name) - 1] = '\0';
+    target_med->takes = 1;
+
+    const size_t new_count = meds_count + 1;
+    if(dump_meds(meds, new_count, APP_DATA_PATH(PATH_FILE_MEDS))) {
+        meds_count = new_count;
+        rebuild_menu_manage(app->menu_manage, app);
+        switch_to_splash(app, VIEWID_SPLASH_NEW_MED_SUCCESS, VIEWID_MENU_MANAGE);
+        return;
+    }
+
+    // Persistence failed: keep the in-memory slot available for another attempt.
+    memset(target_med, 0, sizeof(*target_med));
+    switch_to_splash(app, VIEWID_SPLASH_ERROR, VIEWID_MENU_MANAGE);
 }
 
 ///////////////////////
@@ -256,10 +270,11 @@ static void input_new_med_name_callback(void* context) {
 ///////////////////////
 
 static void set_takes_for_selected_med(VariableItem* item) {
+    if(!item || !target_med) return;
     uint8_t index = variable_item_get_current_value_index(item);
-    target_med->takes = index + 1;
-
     const char* values[] = {"1", "2", "3", "4", "5", "6"};
+    if(index >= (sizeof(values) / sizeof(values[0]))) return;
+    target_med->takes = index + 1;
     variable_item_set_current_value_text(item, values[index]);
 }
 
@@ -272,6 +287,10 @@ static void rebuild_menu_edit_med(VariableItemList* menu) {
         6,
         set_takes_for_selected_med, NULL
     );
+    if(!last) {
+        FURI_LOG_E(APP_LOG_NAME, "Failed to create medicine setting item");
+        return;
+    }
     variable_item_set_current_value_index(last, 0);
     variable_item_set_current_value_text(last, "1");
 }
@@ -299,22 +318,26 @@ int32_t takeyourmeds_app(void* p) {
 
     path_history = APP_DATA_PATH(PATH_FILE_HISTORY);
 
+    AppContext app = {0};
+
     Gui* gui = furi_record_open(RECORD_GUI);
     ViewDispatcher* dispatcher = view_dispatcher_alloc();
-    view_dispatcher_set_event_callback_context(dispatcher, dispatcher);
+    app.dispatcher = dispatcher;
+    view_dispatcher_set_event_callback_context(dispatcher, &app);
     view_dispatcher_set_navigation_event_callback(dispatcher, app_navigation_callback);
     view_dispatcher_attach_to_gui(dispatcher, gui, ViewDispatcherTypeFullscreen);
 
     Submenu* menu_main = submenu_alloc();
     submenu_set_header(menu_main, APP_DISPLAY_NAME);
-    submenu_add_item(menu_main, "Check in",    MENUITEM_MAIN_CHECKIN,  menu_main_callback, dispatcher);
-    submenu_add_item(menu_main, "My stats",    MENUITEM_MAIN_STATS,    menu_main_callback, dispatcher);
-    submenu_add_item(menu_main, "Manage meds", MENUITEM_MAIN_MANAGE,   menu_main_callback, dispatcher);
-    submenu_add_item(menu_main, "Settings",    MENUITEM_MAIN_SETTINGS, menu_main_callback, dispatcher);
-    submenu_add_item(menu_main, "About",       MENUITEM_MAIN_ABOUT,    menu_main_callback, dispatcher);
-    submenu_add_item(menu_main, "Exit",        MENUITEM_MAIN_EXIT,     menu_main_callback, dispatcher);
+    submenu_add_item(menu_main, "Check in",    MENUITEM_MAIN_CHECKIN,  menu_main_callback, &app);
+    submenu_add_item(menu_main, "My stats",    MENUITEM_MAIN_STATS,    menu_main_callback, &app);
+    submenu_add_item(menu_main, "Manage meds", MENUITEM_MAIN_MANAGE,   menu_main_callback, &app);
+    submenu_add_item(menu_main, "Settings",    MENUITEM_MAIN_SETTINGS, menu_main_callback, &app);
+    submenu_add_item(menu_main, "About",       MENUITEM_MAIN_ABOUT,    menu_main_callback, &app);
+    submenu_add_item(menu_main, "Exit",        MENUITEM_MAIN_EXIT,     menu_main_callback, &app);
     
     Submenu* menu_manage = submenu_alloc();
+    app.menu_manage = menu_manage;
     view_set_previous_callback(submenu_get_view(menu_manage), manager_previous_callback);
 
     TextInput* input_new_med_name = text_input_alloc();
@@ -322,6 +345,7 @@ int32_t takeyourmeds_app(void* p) {
    
     VariableItemList* menu_edit_med = variable_item_list_alloc();
     view_set_previous_callback(variable_item_list_get_view(menu_edit_med), menu_edit_med_previous_callback);
+    app.menu_edit_med = menu_edit_med;
 
     TextBox* about = text_box_alloc();
     text_box_set_text(
@@ -342,11 +366,6 @@ int32_t takeyourmeds_app(void* p) {
         "\"Care for your health more!\""
     );
     view_set_previous_callback(text_box_get_view(about), about_previous_callback);
-
-    AppContext app = {
-        .dispatcher = dispatcher,
-        .menu_edit_med = menu_edit_med,
-    };
     
     app.splash_screens[VIEWID_SPLASH_AUTHOR].view         = view_alloc();
     app.splash_screens[VIEWID_SPLASH_AUTHOR].use_text     = false;
@@ -409,13 +428,15 @@ int32_t takeyourmeds_app(void* p) {
 
     view_dispatcher_run(dispatcher);
 
-    for (uint8_t view_id = 1; view_id <= VIEWID_MAX; view_id++) {
+    for(uint8_t view_id = 1; view_id <= SPLASHES_COUNT; view_id++) {
         view_dispatcher_remove_view(dispatcher, view_id);
-
-        if (view_id <= SPLASHES_COUNT) {
-            view_free(app.splash_screens[view_id].view);
-        }
+        view_free(app.splash_screens[view_id].view);
     }
+    view_dispatcher_remove_view(dispatcher, VIEWID_MENU_MAIN);
+    view_dispatcher_remove_view(dispatcher, VIEWID_TEXT_ABOUT);
+    view_dispatcher_remove_view(dispatcher, VIEWID_MENU_MANAGE);
+    view_dispatcher_remove_view(dispatcher, VIEWID_INPUT_NEW_MED_NAME);
+    view_dispatcher_remove_view(dispatcher, VIEWID_EDIT_MED);
 
     submenu_free(menu_main);
     text_box_free(about);
@@ -423,6 +444,7 @@ int32_t takeyourmeds_app(void* p) {
     text_input_free(input_new_med_name);
     variable_item_list_free(menu_edit_med);
 
+    target_med = NULL;
     view_dispatcher_free(dispatcher);
     furi_record_close(RECORD_GUI);
 
